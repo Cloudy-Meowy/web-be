@@ -3,6 +3,8 @@ const router = express.Router();
 
 // Import individual route files
 const authRoutes = require('./auth');
+const userRoutes = require('./user');
+const chatRoutes = require('./chat');
 
 // Mount the individual routers under specific API paths
 router.use('/auth', authRoutes);

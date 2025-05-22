@@ -13,7 +13,7 @@ const User = defineModel('users', {
 // Định nghĩa schema cho bảng chats
 const Chat = defineModel('chats', {
   id: column.string().primaryKey(), // id là kiểu varchar
-  user_id: column.int().references(User.id), // Liên kết với bảng users
+  user_id: column.int(),
   type: column.string().notNull(),  // math, law
   title: column.string().notNull(),
   created_at: column.dateTime().defaultNow()
@@ -28,8 +28,16 @@ const Message = defineModel('messages', {
   timestamp: column.dateTime().defaultNow()
 });
 
+const Agent_profile = defineModel('agent_profiles', {
+  name: column.string().references(Chat.type),
+  system_prompt: column.string(),
+  es_cloud_id: column.string(),
+  es_username: column.string(),
+  es_password: column.string(),
+  es_index: column.string(),
+});
 // Xuất các model để sử dụng trong các file khác
-module.exports = { User, Chat, Message };
+module.exports = { User, Chat, Message, Agent_profile };
 
 // Tạo tất cả các bảng theo schema đã định nghĩa
 async function syncDatabase() {

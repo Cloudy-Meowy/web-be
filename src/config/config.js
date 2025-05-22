@@ -1,10 +1,23 @@
-require('dotenv').config(); // Load environment variables from .env file
-
-dotenv.config(); // Load environment variables from .env file
+// require('dotenv').config(); // Load environment variables from .env file
+// dotenv.config(); // Load environment variables from .env file
 
 const mysqlUrl  = process.env.MYSQL_URL || 'mysql://root:password@localhost:3306/mydb'
 const chatbotAPIUrl = process.env.CHATBOT_API_URL || 'http://localhost:5000/api/chatbot'
-export const config = {
+
+const dbConfig = {
+  host: process.env.DB_HOST,
+  user: process.env.DB_USERNAME,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 3306, // Convert port to number, default to 3306
+  waitForConnections: true, // Whether to wait for connections to become available
+  connectionLimit: 10,     // Max number of connections in the pool
+  queueLimit: 0            // No limit on connection queue
+};
+
+const config = {
     mysqlUrl: mysqlUrl,
     chatbotAPIUrl: chatbotAPIUrl,
 }
+
+module.exports = { dbConfig, config };

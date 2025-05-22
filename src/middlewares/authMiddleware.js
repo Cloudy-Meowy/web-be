@@ -1,6 +1,5 @@
-const admin = require('../app');
+const admin = require('../firebaseAdmin');
 
-// Middleware to protect api that handles sensitive data
 async function verifyFirebaseToken(req, res, next) {
     const authorizationHeader = req.headers.authorization;
 
@@ -12,7 +11,7 @@ async function verifyFirebaseToken(req, res, next) {
 
     try {
         const decodedToken = await admin.auth().verifyIdToken(idToken);
-        req.user = decodedToken; // Add user info to the request object
+        req.user = decodedToken; // Adds Firebase user info (uid, email, etc.) to request
         next();
     } catch (error) {
         console.error('Error while verifying Firebase ID token:', error);

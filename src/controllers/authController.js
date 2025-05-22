@@ -18,7 +18,7 @@ exports.register = async (req, res) => {
 		const userRecord = await admin.auth().createUser({
 			email: email,
 			password: password,
-			emailVerified: true, // Set to false for email verification
+			emailVerified: false, // Set to false for email verification
 			disabled: false,
 		});
 

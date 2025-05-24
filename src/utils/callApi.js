@@ -1,21 +1,26 @@
 exports.callApi = async (url, data) => {
-    try {
-        const response = await fetch(url, {
-            method: method,
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data),
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const result = await response.json();
-        return result;
+  try {
+    const queryString = new URLSearchParams(data).toString();
+    const fullUrl = `${url}?${queryString}`;
+
+    const response = await fetch(fullUrl, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      // Lấy response body dạng text để debug
+      const errorText = await response.text();
+      throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
     }
-    catch (error) {
-        console.error('Error calling API:', error);
-        throw error;
-    }
-}
-//     } catch (error) {
+
+    const result = await response.json();
+    return result;
+
+  } catch (error) {
+    console.error("Error calling API:", error);
+    throw error;
+  }
+};

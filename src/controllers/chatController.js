@@ -1,137 +1,166 @@
-// chatController.js
-const { v4: uuidv4 } = require('uuid');
-const { eq } = require('drizzle-orm');
-const { Chat, Message, Agent_profile } = require('../db/schema.js');
-const chatbotURL = require('../config/config.js').config.chatbotAPIUrl;
-const callApi = require('../utils/callApi.js').callApi;
-const db = require('../db/db.js');
+const { v4: uuidv4 } = require("uuid");
+const { eq } = require("drizzle-orm");
+const { chats, messages, agentProfiles } = require("../db/schema.js");
+const chatbotURL = require("../config/config.js").config.chatbotAPIUrl;
+const callApi = require("../utils/callApi.js").callApi;
+const db = require("../db/db.js");
 
 exports.createChat = async (req, res) => {
-  const { type, question } = req.body;
-  const userId = req.user?.id; // user ID từ auth middleware
+  const { type, query } = req.body;
 
+  const userId = req.user?.uid;
+  console.log("User ID:", userId);
   if (!userId) {
-    return res.status(401).json({ message: 'Unauthorized. User ID missing.' });
+    console.log(req.user);
+    return res.status(401).json({ message: "Unauthorized. User ID missing." });
   }
 
-  if (!type || !question) {
-    return res.status(400).json({ message: 'Type and question are required.' });
+  if (!type || !query) {
+    return res.status(400).json({ message: "Type and query are required." });
   }
 
   try {
     const chatId = uuidv4();
 
-    await db.insert(Chat).values({
-      id: chatId,
-      user_id: userId,
-      type: type,
-      title: question,
-    });
-
-    const agentProfile = await db.select()
-      .from(Agent_profile)
-      .where(eq(Agent_profile.name, type))
+    const agentProfile = await db
+      .select()
+      .from(agentProfiles)
+      .where(eq(agentProfiles.name, type))
       .limit(1);
 
     if (agentProfile.length === 0) {
-      return res.status(404).json({ message: 'Agent profile not found.' });
+      // Gọi Gemini Flash để tạo prompt
+      const generatedPrompt = await callGeminiFlashForPrompt(type);
+
+      const newProfile = {
+        name: type,
+        systemPrompt: generatedPrompt,
+        esCloudId: "your_es_cloud_id",
+        esUsername: "your_es_username",
+        esPassword: "your_es_password",
+        esIndex: "your_es_index",
+      };
+
+      await db.insert(agentProfiles).values(newProfile);
+
+      profile = newProfile;
     }
 
     const profile = agentProfile[0];
 
     const response = await callApi(chatbotURL, {
-      question,
-      system_prompt: profile.system_prompt,
-      es_cloud_id: profile.es_cloud_id,
-      es_username: profile.es_username,
-      es_password: profile.es_password,
-      es_index: profile.es_index,
+      query,
+      system_prompt: profile.systemPrompt,
+      es_cloud_id: profile.esCloudId,
+      es_username: profile.esUsername,
+      es_password: profile.esPassword,
+      index: profile.esIndex,
+      his_message: "", // thêm nếu cần
     });
 
-    const ans = response.response;
+    console.log("API response:", response);
 
-    await db.insert(Message).values({
-      chat_id: chatId,
-      sender: 'user',
-      content: question,
+    const ans = response;
+
+    await db.insert(chats).values({
+      id: chatId,
+      userId: userId,
+      type: type,
+      title: query,
     });
 
-    await db.insert(Message).values({
-      chat_id: chatId,
-      sender: 'bot',
+    await db.insert(messages).values({
+      id: uuidv4(),
+      chatId: chatId,
+      sender: "user",
+      content: query,
+    });
+
+    await db.insert(messages).values({
+      id: uuidv4(),
+      chatId: chatId,
+      sender: "bot",
       content: ans,
     });
 
-    return res.status(201).json({ message: 'Chat created successfully.', chatId });
+    return res
+      .status(201)
+      .json({ message: "Chat created successfully.", chatId });
   } catch (error) {
-    console.error('Error creating chat:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    console.error("Error creating chat:", error);
+    return res.status(500).json({ message: "Server error." });
   }
 };
 
 exports.sendQuestion = async (req, res) => {
   const chatId = req.params.id;
-  const { question } = req.body;
+  const { query } = req.body;
 
-  if (!chatId || !question) {
-    return res.status(400).json({ message: 'Chat ID and question are required.' });
+  if (!chatId || !query) {
+    return res.status(400).json({ message: "Chat ID and query are required." });
   }
 
   try {
-    const chat = await db.select()
-      .from(Chat)
-      .where(eq(Chat.id, chatId))
+    const chat = await db
+      .select()
+      .from(chats)
+      .where(eq(chats.id, chatId))
       .limit(1);
 
     if (chat.length === 0) {
-      return res.status(404).json({ message: 'Chat not found.' });
+      return res.status(404).json({ message: "Chat not found." });
     }
 
     const chatData = chat[0];
 
-    const agentProfile = await db.select()
-      .from(Agent_profile)
-      .where(eq(Agent_profile.name, chatData.type))
+    const agentProfile = await db
+      .select()
+      .from(agentProfiles)
+      .where(eq(agentProfiles.name, chatData.type))
       .limit(1);
 
     if (agentProfile.length === 0) {
-      return res.status(404).json({ message: 'Agent profile not found.' });
+      return res.status(404).json({ message: "Agent profile not found." });
     }
 
     const profile = agentProfile[0];
 
-    // Lấy lịch sử message (câu hỏi + trả lời) để làm history
     const msg_list = await fetchOldMessages(chatId);
-    const msg_list_str = msg_list.map(msg => msg.content).join(' ');
+    const msg_list_str = msg_list.map((msg) => msg.content).join(" ");
 
     const response = await callApi(chatbotURL, {
-      question,
+      query,
       history: msg_list_str,
-      system_prompt: profile.system_prompt,
-      es_cloud_id: profile.es_cloud_id,
-      es_username: profile.es_username,
-      es_password: profile.es_password,
-      es_index: profile.es_index,
+      system_prompt: profile.systemPrompt,
+      es_cloud_id: profile.esCloudId,
+      es_username: profile.esUsername,
+      es_password: profile.esPassword,
+      index: profile.esIndex,
+      his_message: msg_list_str, // hoặc "" nếu không muốn truyền lịch sử
     });
 
-    const ans = response.response;
+    const ans = response;
 
-    await db.insert(Message).values({
-      chat_id: chatId,
-      sender: 'user',
-      content: question,
+    await db.insert(messages).values({
+      id: uuidv4(),
+      chatId: chatId,
+      sender: "user",
+      content: query,
     });
 
-    await db.insert(Message).values({
-      chat_id: chatId,
-      sender: 'bot',
+    await db.insert(messages).values({
+      id: uuidv4(),
+      chatId: chatId,
+      sender: "bot",
       content: ans,
     });
 
-    return res.status(200).json({ message: 'Question sent successfully.', response });
+    return res
+      .status(200)
+      .json({ message: "Query sent successfully.", response });
   } catch (error) {
-    console.error('Error sending question:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    console.error("Error sending query:", error);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
@@ -139,43 +168,47 @@ exports.getChat = async (req, res) => {
   const chatId = req.params.id;
 
   if (!chatId) {
-    return res.status(400).json({ message: 'Chat ID is required.' });
+    return res.status(400).json({ message: "Chat ID is required." });
   }
 
   try {
-    const chat = await db.select()
-      .from(Chat)
-      .where(eq(Chat.id, chatId))
+    const chat = await db
+      .select()
+      .from(chats)
+      .where(eq(chats.id, chatId))
       .limit(1);
 
     if (chat.length === 0) {
-      return res.status(404).json({ message: 'Chat not found.' });
+      return res.status(404).json({ message: "Chat not found." });
     }
 
     const chatData = chat[0];
 
-    const messages = await db.select()
-      .from(Message)
-      .where(eq(Message.chat_id, chatId))
-      .orderBy(Message.timestamp, 'asc');
+    const messagesData = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.chatId, chatId))
+      .orderBy(messages.timestamp, "asc");
 
     const chatResponse = {
-      chat_id: chatData.id,
-      user_id: chatData.user_id,
+      chatId: chatData.id,
+      user_id: chatData.userId,
       type: chatData.type,
       title: chatData.title,
-      created_at: chatData.created_at,
-      messages: messages.map(message => ({
+      created_at: chatData.createdAt,
+      messages: messagesData.map((message) => ({
         sender: message.sender,
         message: message.content,
         created_at: message.timestamp,
       })),
     };
 
-    return res.status(200).json({ message: 'Chat retrieved successfully.', chat: chatResponse });
+    return res
+      .status(200)
+      .json({ message: "Chat retrieved successfully.", chat: chatResponse });
   } catch (error) {
-    console.error('Error fetching chat:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    console.error("Error fetching chat:", error);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
@@ -183,65 +216,102 @@ exports.deleteChat = async (req, res) => {
   const chatId = req.params.id;
 
   if (!chatId) {
-    return res.status(400).json({ message: 'Chat ID is required.' });
+    return res.status(400).json({ message: "Chat ID is required." });
   }
 
   try {
-    const chat = await db.select()
-      .from(Chat)
-      .where(eq(Chat.id, chatId))
+    const chat = await db
+      .select()
+      .from(chats)
+      .where(eq(chats.id, chatId))
       .limit(1);
 
     if (chat.length === 0) {
-      return res.status(404).json({ message: 'Chat not found.' });
+      return res.status(404).json({ message: "Chat not found." });
     }
 
-    await db.delete(Message).where(eq(Message.chat_id, chatId));
-    await db.delete(Chat).where(eq(Chat.id, chatId));
+    await db.delete(messages).where(eq(messages.chatId, chatId));
+    await db.delete(chats).where(eq(chats.id, chatId));
 
-    return res.status(200).json({ message: 'Chat deleted successfully.' });
+    return res.status(200).json({ message: "Chat deleted successfully." });
   } catch (error) {
-    console.error('Error deleting chat:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    console.error("Error deleting chat:", error);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
 exports.getChatHistory = async (req, res) => {
   try {
     const chatbot_type = req.query.chatbot_type;
-
+    console.log("Chatbot type:", chatbot_type);
     if (!chatbot_type) {
-      return res.status(400).json({ message: 'chatbot_type query parameter is required.' });
+      return res
+        .status(400)
+        .json({ message: "chatbot_type query parameter is required." });
     }
 
-    const chat_list = await db.select()
-      .from(Chat)
-      .where(eq(Chat.type, chatbot_type))
-      .orderBy(Chat.created_at, 'desc');
+    const chat_list = await db
+      .select()
+      .from(chats)
+      .where(eq(chats.type, chatbot_type))
+      .orderBy(chats.createdAt, "desc");
 
     if (chat_list.length === 0) {
-      return res.status(404).json({ message: 'No chat history found.' });
+      return res.status(404).json({ message: "No chat history found." });
     }
 
-    const result = chat_list.map(chat => ({
-      chat_id: chat.id,
+    const result = chat_list.map((chat) => ({
+      chatId: chat.id,
       title: chat.title,
-      created_at: chat.created_at,
+      created_at: chat.createdAt,
       type: chat.type,
     }));
 
-    return res.status(200).json({ message: 'Chat history retrieved successfully.', chat_list: result });
+    return res.status(200).json({
+      message: "Chat history retrieved successfully.",
+      chat_list: result,
+    });
   } catch (error) {
-    console.error('Error getting chat history:', error);
-    return res.status(500).json({ message: 'Internal server error.' });
+    console.error("Error getting chat history:", error);
+    return res.status(500).json({ message: "Internal server error." });
   }
 };
 
 // Hàm lấy lịch sử tin nhắn theo chatId
 const fetchOldMessages = async (chatId) => {
-  const messages = await db.select()
-    .from(Message)
-    .where(eq(Message.chat_id, chatId))
-    .orderBy(Message.timestamp, 'asc');
-  return messages;
+  const messagesData = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.chatId, chatId))
+    .orderBy(messages.timestamp, "asc");
+  return messagesData;
+};
+
+const callGeminiFlashForPrompt = async (type) => {
+
+  const promptTemplate = `Viết đoạn system prompt cho chatbot chuyên gia về chủ đề: "${type}". Đoạn prompt này dùng để hướng dẫn bot trả lời câu hỏi chuyên sâu và kèm nguồn thông tin.`;
+
+  const response = await callGeminiFlashApi({
+    prompt: promptTemplate,
+    max_tokens: 150,
+  });
+
+  return response.generated_text; // Giả sử key trả về
+};
+
+const callGeminiFlashApi = async ({ prompt, max_tokens }) => {
+  // Tùy API bạn có thể thay đổi url, headers, body phù hợp
+  const res = await fetch(`${GEMINI_URL}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${GEMINI_API_KEY}`, // Thay bằng key thực tế
+    },
+    body: JSON.stringify({
+      prompt,
+      max_tokens,
+    }),
+  });
+  if (!res.ok) throw new Error("Gemini Flash API error");
+  return await res.json();
 };

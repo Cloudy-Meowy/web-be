@@ -5,6 +5,9 @@ const router = express.Router();
 const authRoutes = require('./auth');
 const chatRoutes = require('./chat');
 
+const verifyFirebaseToken = require('../middlewares/authMiddleware');
+// Apply the Firebase token verification middleware to all routes
+router.use(verifyFirebaseToken);
 // Mount the individual routers under specific API paths
 router.use('/auth', authRoutes);
 router.use('/chat', chatRoutes);

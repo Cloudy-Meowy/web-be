@@ -8,19 +8,10 @@ const {
 const { sql } = require('drizzle-orm');
 const db = require('./db.js'); // Kết nối MySQL thông qua Drizzle
 
-// Định nghĩa schema cho bảng users
-exports.users = mysqlTable('users', {
-	id: int('id').primaryKey().autoincrement(),
-	email: varchar('email', { length: 255 }).notNull().unique(),
-	name: varchar('name', { length: 255 }).notNull(),
-	passwordHash: text('password_hash').notNull(),
-	createdAt: datetime('created_at', { mode: 'string' }).default(sql`CURRENT_TIMESTAMP`),
-});
-
 // Định nghĩa schema cho bảng chats
 exports.chats = mysqlTable('chats', {
 	id: varchar('id', { length: 255 }).primaryKey(),
-	userId: int('user_id'),
+	userId: varchar('user_id', { length: 255 }).notNull(),
 	type: varchar('type', { length: 255 }).notNull(),
 	title: varchar('title', { length: 255 }).notNull(),
 	createdAt: datetime('created_at', { mode: 'string' }).default(sql`CURRENT_TIMESTAMP`),
@@ -52,15 +43,3 @@ module.exports = {
   agentProfiles: exports.agentProfiles,
 };
 
-// Tạo tất cả các bảng theo schema đã định nghĩa
-async function syncDatabase() {
-  console.log('Attempting to sync database schema...');
-  try {
-    await db.sync({ force: true }); // Đồng bộ các bảng với cơ sở dữ liệu
-    console.log('Database schema synced successfully!');
-  } catch (error) {
-    console.error('Error syncing database schema:', error);
-  }
-} // CÁI NÀY ĐANG BỊ LỖI: db.sync is not a function
-
-syncDatabase();

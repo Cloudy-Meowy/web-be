@@ -3,7 +3,7 @@
 
 const mysqlUrl  = process.env.MYSQL_URL || 'mysql://root:password@localhost:3306/mydb'
 const chatbotAPIUrl = process.env.CHATBOT_API_URL || 'http://localhost:5000/api/chatbot'
-
+const GEMINI_URL = process.env.GEMINI_URL || 'https://api.gemini.com/v1/flash'
 const dbConfig = {
   host: process.env.DB_HOST,
   user: process.env.DB_USERNAME,
@@ -20,4 +20,8 @@ const config = {
     chatbotAPIUrl: chatbotAPIUrl,
 }
 
-module.exports = { dbConfig, config };
+const geminiConfig = {
+    url: GEMINI_URL,
+}
+
+module.exports = { dbConfig, config, geminiConfig };

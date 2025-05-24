@@ -4,7 +4,8 @@ const { chats, messages, agentProfiles } = require("../db/schema.js");
 const chatbotURL = require("../config/config.js").config.chatbotAPIUrl;
 const callApi = require("../utils/callApi.js").callApi;
 const db = require("../db/db.js");
-
+const GEMINI_URL = require("../config/config.js").geminiConfig.url;
+console.log("geminiurl:", GEMINI_URL);
 exports.createChat = async (req, res) => {
   const { type, query } = req.body;
 
@@ -29,21 +30,7 @@ exports.createChat = async (req, res) => {
       .limit(1);
 
     if (agentProfile.length === 0) {
-      // Gọi Gemini Flash để tạo prompt
-      const generatedPrompt = await callGeminiFlashForPrompt(type);
-
-      const newProfile = {
-        name: type,
-        systemPrompt: generatedPrompt,
-        esCloudId: "your_es_cloud_id",
-        esUsername: "your_es_username",
-        esPassword: "your_es_password",
-        esIndex: "your_es_index",
-      };
-
-      await db.insert(agentProfiles).values(newProfile);
-
-      profile = newProfile;
+      return res.status(404).json({ message: "Agent profile not found." });
     }
 
     const profile = agentProfile[0];
@@ -61,12 +48,13 @@ exports.createChat = async (req, res) => {
     console.log("API response:", response);
 
     const ans = response;
-
+    const tittleGenerated = await callGeminiFlashForPrompt(type,query);
+    console.log("Generated title:", tittleGenerated);
     await db.insert(chats).values({
       id: chatId,
       userId: userId,
       type: type,
-      title: query,
+      title: tittleGenerated,
     });
 
     await db.insert(messages).values({
@@ -287,31 +275,42 @@ const fetchOldMessages = async (chatId) => {
   return messagesData;
 };
 
-const callGeminiFlashForPrompt = async (type) => {
+const callGeminiFlashForPrompt = async (type, query) => {
+  const promptTemplate = `Viết một title ngắn gọn về chủ đề "${type}" với nội dung "${query}". Title phải có chính xác 5 từ, chỉ gồm chữ thường và khoảng trắng, không chứa chữ hoa, số hay ký tự đặc biệt. Chỉ trả về đúng title, không giải thích thêm.`;
 
-  const promptTemplate = `Viết đoạn system prompt cho chatbot chuyên gia về chủ đề: "${type}". Đoạn prompt này dùng để hướng dẫn bot trả lời câu hỏi chuyên sâu và kèm nguồn thông tin.`;
+  const generatedText = await callGeminiFlashApi(promptTemplate);
 
-  const response = await callGeminiFlashApi({
-    prompt: promptTemplate,
-    max_tokens: 150,
-  });
-
-  return response.generated_text; // Giả sử key trả về
+  return generatedText;
 };
 
-const callGeminiFlashApi = async ({ prompt, max_tokens }) => {
-  // Tùy API bạn có thể thay đổi url, headers, body phù hợp
-  const res = await fetch(`${GEMINI_URL}`, {
+const GEMINI_URL_FULL =GEMINI_URL
+console.log("GEMINI_URL_FULL:", GEMINI_URL_FULL);
+const callGeminiFlashApi = async (promptText) => {
+  const res = await fetch(GEMINI_URL_FULL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${GEMINI_API_KEY}`, // Thay bằng key thực tế
     },
     body: JSON.stringify({
-      prompt,
-      max_tokens,
+      contents: [
+        {
+          parts: [
+            {
+              text: promptText,
+            },
+          ],
+        },
+      ],
     }),
   });
-  if (!res.ok) throw new Error("Gemini Flash API error");
-  return await res.json();
+
+  if (!res.ok) {
+    const errorText = await res.text();
+    throw new Error(`Gemini Flash API error: ${res.status} - ${errorText}`);
+  }
+
+  const json = await res.json();
+  const content = json.candidates?.[0]?.content || "";
+  const text = content.parts?.[0]?.text || "";
+  return text;
 };

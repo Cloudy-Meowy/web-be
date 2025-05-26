@@ -1,9 +1,9 @@
 steps:
   - name: 'gcr.io/cloud-builders/npm'
     args: ['install']
-  - name: 'gcr.io/cloud-builders/npm'
-    args: ['run', 'build'] # Remove if not using a build step
   - name: 'gcr.io/cloud-builders/gcloud'
     args: ['app', 'deploy', 'app.yaml', '--quiet']
 
 timeout: 900s
+options:
+  logging: CLOUD_LOGGING_ONLY

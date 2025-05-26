@@ -48,7 +48,7 @@ exports.createChat = async (req, res) => {
     console.log("API response:", response);
 
     const ans = response;
-    const tittleGenerated = await callGeminiFlashForPrompt(type,query);
+    const tittleGenerated = await callGeminiFlashForPrompt(type, query);
     console.log("Generated title:", tittleGenerated);
     await db.insert(chats).values({
       id: chatId,
@@ -83,6 +83,10 @@ exports.createChat = async (req, res) => {
 exports.sendQuestion = async (req, res) => {
   const chatId = req.params.id;
   const { query } = req.body;
+  const userId = req.user?.uid;
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized. User ID missing." });
+  }
 
   if (!chatId || !query) {
     return res.status(400).json({ message: "Chat ID and query are required." });
@@ -92,7 +96,7 @@ exports.sendQuestion = async (req, res) => {
     const chat = await db
       .select()
       .from(chats)
-      .where(eq(chats.id, chatId))
+      .where(eq(chats.id, chatId) && eq(chats.userId, userId))
       .limit(1);
 
     if (chat.length === 0) {
@@ -154,6 +158,10 @@ exports.sendQuestion = async (req, res) => {
 
 exports.getChat = async (req, res) => {
   const chatId = req.params.id;
+  const userId = req.user?.uid;
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized. User ID missing." });
+  }
 
   if (!chatId) {
     return res.status(400).json({ message: "Chat ID is required." });
@@ -163,7 +171,8 @@ exports.getChat = async (req, res) => {
     const chat = await db
       .select()
       .from(chats)
-      .where(eq(chats.id, chatId))
+      .where(eq(chats.id, chatId) && eq(chats.userId, userId))
+
       .limit(1);
 
     if (chat.length === 0) {
@@ -202,6 +211,10 @@ exports.getChat = async (req, res) => {
 
 exports.deleteChat = async (req, res) => {
   const chatId = req.params.id;
+  const userId = req.user?.uid;
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized. User ID missing." });
+  }
 
   if (!chatId) {
     return res.status(400).json({ message: "Chat ID is required." });
@@ -211,7 +224,8 @@ exports.deleteChat = async (req, res) => {
     const chat = await db
       .select()
       .from(chats)
-      .where(eq(chats.id, chatId))
+      .where(eq(chats.id, chatId) && eq(chats.userId, userId))
+
       .limit(1);
 
     if (chat.length === 0) {
@@ -231,6 +245,14 @@ exports.deleteChat = async (req, res) => {
 exports.getChatHistory = async (req, res) => {
   try {
     const chatbot_type = req.query.chatbot_type;
+    const userId = req.user?.uid;
+    console.log("User ID:", userId);
+    if (!userId) {
+      return res
+        .status(401)
+        .json({ message: "Unauthorized. User ID missing." });
+    }
+
     console.log("Chatbot type:", chatbot_type);
     if (!chatbot_type) {
       return res
@@ -241,7 +263,7 @@ exports.getChatHistory = async (req, res) => {
     const chat_list = await db
       .select()
       .from(chats)
-      .where(eq(chats.type, chatbot_type))
+      .where(eq(chats.type, chatbot_type) && eq(chats.userId, userId))
       .orderBy(chats.createdAt, "desc");
 
     if (chat_list.length === 0) {
@@ -283,7 +305,7 @@ const callGeminiFlashForPrompt = async (type, query) => {
   return generatedText;
 };
 
-const GEMINI_URL_FULL =GEMINI_URL
+const GEMINI_URL_FULL = GEMINI_URL;
 console.log("GEMINI_URL_FULL:", GEMINI_URL_FULL);
 const callGeminiFlashApi = async (promptText) => {
   const res = await fetch(GEMINI_URL_FULL, {

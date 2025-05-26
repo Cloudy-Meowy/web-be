@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
-const { eq } = require("drizzle-orm");
+const { eq, and } = require("drizzle-orm");
 const { chats, messages, agentProfiles } = require("../db/schema.js");
 const chatbotURL = require("../config/config.js").config.chatbotAPIUrl;
 const callApi = require("../utils/callApi.js").callApi;
@@ -96,7 +96,9 @@ exports.sendQuestion = async (req, res) => {
     const chat = await db
       .select()
       .from(chats)
-      .where(eq(chats.id, chatId) && eq(chats.userId, userId))
+      .where(
+        and(eq(chats.id, chatId), eq(chats.userId, userId))
+      )
       .limit(1);
 
     if (chat.length === 0) {
@@ -171,8 +173,7 @@ exports.getChat = async (req, res) => {
     const chat = await db
       .select()
       .from(chats)
-      .where(eq(chats.id, chatId) && eq(chats.userId, userId))
-
+      .where(and (eq(chats.id, chatId), eq(chats.userId, userId)))
       .limit(1);
 
     if (chat.length === 0) {
@@ -224,7 +225,7 @@ exports.deleteChat = async (req, res) => {
     const chat = await db
       .select()
       .from(chats)
-      .where(eq(chats.id, chatId) && eq(chats.userId, userId))
+      .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))
 
       .limit(1);
 
@@ -259,13 +260,13 @@ exports.getChatHistory = async (req, res) => {
         .status(400)
         .json({ message: "chatbot_type query parameter is required." });
     }
+    console.log("Fetching chat history for type:", chatbot_type);
 
     const chat_list = await db
       .select()
       .from(chats)
-      .where(eq(chats.type, chatbot_type) && eq(chats.userId, userId))
+      .where(and(eq(chats.type, chatbot_type), eq(chats.userId, userId)))
       .orderBy(chats.createdAt, "desc");
-
     if (chat_list.length === 0) {
       return res.status(404).json({ message: "No chat history found." });
     }

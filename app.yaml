@@ -1,0 +1,6 @@
+# filepath: d:\UET\CloudApp\Final\web-be\app.yaml
+service: api-backend   # <-- Change this to any unique name, e.g., "api", "backend", etc.
+runtime: nodejs20
+entrypoint: node server.js
+env_variables:
+  PORT: 8080

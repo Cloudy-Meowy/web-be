@@ -35,20 +35,8 @@ exports.createChat = async (req, res) => {
 
     const profile = agentProfile[0];
 
-    const response = await callApi(chatbotURL, {
-      query,
-      system_prompt: profile.systemPrompt,
-      es_cloud_id: profile.esCloudId,
-      es_username: profile.esUsername,
-      es_password: profile.esPassword,
-      index: profile.esIndex,
-      his_message: "", // thêm nếu cần
-    });
-
-    console.log("API response:", response);
-
-    const ans = response;
     const tittleGenerated = await callGeminiFlashForPrompt(type, query);
+    
     console.log("Generated title:", tittleGenerated);
     await db.insert(chats).values({
       id: chatId,
@@ -63,6 +51,19 @@ exports.createChat = async (req, res) => {
       sender: "user",
       content: query,
     });
+
+    const response = await callApi(chatbotURL, {
+      query,
+      system_prompt: profile.systemPrompt,
+      es_cloud_id: profile.esCloudId,
+      es_username: profile.esUsername,
+      es_password: profile.esPassword,
+      index: profile.esIndex,
+      his_message: "", // thêm nếu cần
+    });
+    const ans = response;
+
+    console.log("API response:", response);
 
     await db.insert(messages).values({
       id: uuidv4(),
@@ -96,9 +97,7 @@ exports.sendQuestion = async (req, res) => {
     const chat = await db
       .select()
       .from(chats)
-      .where(
-        and(eq(chats.id, chatId), eq(chats.userId, userId))
-      )
+      .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))
       .limit(1);
 
     if (chat.length === 0) {
@@ -122,6 +121,13 @@ exports.sendQuestion = async (req, res) => {
     const msg_list = await fetchOldMessages(chatId);
     const msg_list_str = msg_list.map((msg) => msg.content).join(" ");
 
+    await db.insert(messages).values({
+      id: uuidv4(),
+      chatId: chatId,
+      sender: "user",
+      content: query,
+    });
+
     const response = await callApi(chatbotURL, {
       query,
       history: msg_list_str,
@@ -134,13 +140,6 @@ exports.sendQuestion = async (req, res) => {
     });
 
     const ans = response;
-
-    await db.insert(messages).values({
-      id: uuidv4(),
-      chatId: chatId,
-      sender: "user",
-      content: query,
-    });
 
     await db.insert(messages).values({
       id: uuidv4(),
@@ -173,7 +172,7 @@ exports.getChat = async (req, res) => {
     const chat = await db
       .select()
       .from(chats)
-      .where(and (eq(chats.id, chatId), eq(chats.userId, userId)))
+      .where(and(eq(chats.id, chatId), eq(chats.userId, userId)))
       .limit(1);
 
     if (chat.length === 0) {
